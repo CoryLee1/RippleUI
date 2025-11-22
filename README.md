@@ -26,7 +26,10 @@ RippleUI 是一个创新的用户界面系统，通过点击图像中的物体�
 
 ### 后端
 - **FastAPI** - 现代 Python Web 框架
-- **Google Gemini API** - AI 模型（使用 `gemini-2.0-flash-exp`）
+- **Google Gemini API** - AI 模型
+  - `gemini-2.0-flash` - 用于场景分析和意图推理
+  - `gemini-2.5-flash-image` - 用于图像编辑（已接入真实 API）
+- **Google Genai SDK** - 新版 Google Genai SDK（`google-genai>=1.16.0`）
 - **Pydantic** - 数据验证和序列化
 - **Pillow** - 图像处理
 
@@ -215,11 +218,61 @@ npm run dev
 
 ## 📝 待实现功能
 
-- [ ] 接入真实的 Google Vertex AI Imagen API 进行图像编辑
+- [x] 接入 Google Gemini Image Editing API（`gemini-2.5-flash-image`）
 - [ ] 使用 Redis 替代内存缓存
 - [ ] 添加 Session 管理
 - [ ] 支持多图片上传
 - [ ] 添加撤销/重做功能
+- [ ] **SDK 化**：将核心功能封装为独立的 Python SDK（详见 [SDK 设计文档](./SDK_DESIGN.md)）
+
+## 🚀 SDK 化计划
+
+RippleUI 的核心功能已具备 SDK 化的条件，我们计划将其封装为独立的 Python SDK，使其可以在任何 Python 项目中使用。
+
+### ✅ SDK 化可行性评估
+
+**结论：高度可行**
+
+当前代码结构已经非常适合 SDK 化：
+- ✅ 核心逻辑已模块化（`AIService`、`schemas`、`utils`）
+- ✅ 数据模型已定义（Pydantic）
+- ✅ 工具函数已分离
+- ✅ 错误处理已完善
+
+### 📦 计划中的 SDK 特性
+
+1. **独立使用**：不依赖 FastAPI，可作为库使用
+2. **灵活接口**：同时支持同步和异步两种使用方式
+3. **配置管理**：支持环境变量、配置文件和代码传入
+4. **易于集成**：可在脚本、Web 应用、Jupyter Notebook 等场景使用
+
+### 📚 设计文档
+
+详细的 SDK 设计文档请查看：[SDK_DESIGN.md](./SDK_DESIGN.md)
+
+### 💡 预期使用方式
+
+```python
+# 同步使用
+from rippleui import RippleClient
+
+client = RippleClient(api_key="your-api-key")
+objects = client.analyze_scene(image)
+intents = client.infer_intent(image, clicked_label="Window", click_x=100, click_y=200)
+edited_image = client.execute_edit(image, prompt="Change color to red", box_2d=[0,0,100,100])
+
+# 异步使用
+async with RippleClient(api_key="your-api-key") as client:
+    objects = await client.analyze_scene(image)
+    intents = await client.infer_intent(image, clicked_label="Window", click_x=100, click_y=200)
+    edited_image = await client.execute_edit(image, prompt="Change color to red", box_2d=[0,0,100,100])
+```
+
+### 🗓️ 实施计划
+
+- **阶段 1（MVP）**：创建 SDK 包结构，实现基础功能
+- **阶段 2（完善）**：添加异步支持、错误处理、测试
+- **阶段 3（发布）**：准备 PyPI 发布，完善文档
 
 ## 📄 许可证
 
@@ -231,4 +284,10 @@ npm run dev
 
 ---
 
-**注意**：这是一个 MVP 原型，部分功能（如图像编辑）目前为模拟实现。
+## 🎉 最新更新
+
+- ✅ **图像编辑功能已接入真实 API**：使用 `gemini-2.5-flash-image` 模型进行图像编辑
+- ✅ **新版 SDK 支持**：已迁移到 `google-genai>=1.16.0` SDK
+- ✅ **SDK 化计划**：核心功能已具备 SDK 化条件，详见 [SDK_DESIGN.md](./SDK_DESIGN.md)
+
+**注意**：这是一个 MVP 原型，部分功能（如 Redis 缓存、Session 管理）仍在开发中。
