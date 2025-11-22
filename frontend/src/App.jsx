@@ -18,6 +18,7 @@ function App() {
   const [clickedObj, setClickedObj] = useState(null); // 保存点击的物体
   const [clickAbsPosition, setClickAbsPosition] = useState(null); // 新增状态来存储点击的绝对屏幕坐标
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true); // 控制 bounding box 的显示/隐藏
+  const [enableImageEdit, setEnableImageEdit] = useState(true); // 控制是否启用图像编辑
   
   const imageRef = useRef(null);
 
@@ -108,7 +109,7 @@ function App() {
   // 3. 处理意图执行 (Execution)
   const handleIntentSelect = async (intent) => {
     setMenuState({ ...menuState, isOpen: false });
-    setStatus(`Executing: ${intent.label}... (Calling Nanobanana)`);
+    setStatus(`Executing: ${intent.label}... ${enableImageEdit ? '(Gemini Image Edit)' : '(Preview Mode)'}`);
     setIsLoading(true);
 
     // 使用之前保存的点击物体框
@@ -117,6 +118,7 @@ function App() {
     const formData = new FormData();
     formData.append('prompt', intent.editor_prompt);
     formData.append('box_json', JSON.stringify(box));
+    formData.append('enable_image_edit', enableImageEdit.toString());
 
     try {
       const res = await axios.post(`${API_URL}/execute`, formData);
@@ -124,7 +126,7 @@ function App() {
       if(res.data.image_base64) {
           setImage(`data:image/png;base64,${res.data.image_base64}`);
       }
-      setStatus("World updated.");
+      setStatus(enableImageEdit ? "Image edited successfully." : "Preview mode (editing disabled).");
     } catch (err) {
       console.error(err);
       setStatus("Error executing action.");
@@ -157,6 +159,21 @@ function App() {
               />
             </button>
           )}
+          
+          {/* 图像编辑开关按钮 */}
+          <button
+            onClick={() => setEnableImageEdit(!enableImageEdit)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition ${
+              enableImageEdit 
+                ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-300' 
+                : 'bg-white/10 hover:bg-white/20 text-white/70'
+            }`}
+            title={enableImageEdit ? "Disable image editing (Preview Mode)" : "Enable image editing (Gemini API)"}
+          >
+            <span className="text-sm font-medium">
+              {enableImageEdit ? '✏️ Edit ON' : '👁️ Preview'}
+            </span>
+          </button>
           
           <label className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full cursor-pointer transition">
             <Upload size={16} />
