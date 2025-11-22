@@ -3,6 +3,8 @@ import axios from 'axios';
 import FingerprintCursor from './components/FingerprintCursor';
 import RippleMenu from './components/RippleMenu';
 import { Scan, Upload, Loader2 } from 'lucide-react';
+import visibleIcon from './assets/visable.png';
+import invisibleIcon from './assets/invisable.png';
 
 const API_URL = "http://localhost:8000/api";
 
@@ -15,6 +17,7 @@ function App() {
   const [status, setStatus] = useState("Waiting for image...");
   const [clickedObj, setClickedObj] = useState(null); // 保存点击的物体
   const [clickAbsPosition, setClickAbsPosition] = useState(null); // 新增状态来存储点击的绝对屏幕坐标
+  const [showBoundingBoxes, setShowBoundingBoxes] = useState(true); // 控制 bounding box 的显示/隐藏
   
   const imageRef = useRef(null);
 
@@ -139,6 +142,22 @@ function App() {
         <h1 className="text-xl font-bold tracking-wider">RIPPLE UI <span className="text-xs font-normal opacity-50">PROTOTYPE</span></h1>
         <div className="flex gap-4 items-center">
           <span className="text-sm opacity-70 font-mono">{status}</span>
+          
+          {/* Bounding Box 显示/隐藏切换按钮 */}
+          {objects.length > 0 && (
+            <button
+              onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
+              className="flex items-center justify-center bg-white/10 hover:bg-white/20 px-3 py-2 rounded-full transition"
+              title={showBoundingBoxes ? "Hide bounding boxes" : "Show bounding boxes"}
+            >
+              <img 
+                src={showBoundingBoxes ? visibleIcon : invisibleIcon} 
+                alt={showBoundingBoxes ? "Hide" : "Show"}
+                className="w-5 h-5"
+              />
+            </button>
+          )}
+          
           <label className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full cursor-pointer transition">
             <Upload size={16} />
             <span className="text-sm">Upload Image</span>
@@ -157,17 +176,75 @@ function App() {
         )}
         
         {image && (
-          <div className="relative shadow-2xl">
+          <div className="relative shadow-2xl inline-block">
             <img 
               ref={imageRef}
               src={image} 
               alt="Workspace" 
-              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg"
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg block"
               onClick={handleImageClick}
             />
             
-            {/* 可视化 Bounding Box (调试用，或者作为 Hover 效果) */}
-            {/* 这里可以遍历 objects 渲染高亮框，略 */}
+            {/* 可视化 Bounding Box - 蓝色科幻细线 */}
+            {showBoundingBoxes && objects.length > 0 && imageRef.current && (() => {
+              const rect = imageRef.current.getBoundingClientRect();
+              const scaleX = rect.width / imageRef.current.naturalWidth;
+              const scaleY = rect.height / imageRef.current.naturalHeight;
+              
+              return (
+                <svg
+                  className="absolute top-0 left-0 pointer-events-none"
+                  style={{
+                    width: rect.width,
+                    height: rect.height,
+                  }}
+                  viewBox={`0 0 ${rect.width} ${rect.height}`}
+                >
+                  {objects.map((obj, index) => {
+                    // box_2d 格式: [y0, x0, y1, x1] (像素坐标)
+                    // 转换为显示坐标
+                    const x = obj.box_2d[1] * scaleX;
+                    const y = obj.box_2d[0] * scaleY;
+                    const width = (obj.box_2d[3] - obj.box_2d[1]) * scaleX;
+                    const height = (obj.box_2d[2] - obj.box_2d[0]) * scaleY;
+                    
+                    return (
+                      <g key={obj.id || index}>
+                        {/* 蓝色科幻细线边框 */}
+                        <rect
+                          x={x}
+                          y={y}
+                          width={width}
+                          height={height}
+                          fill="none"
+                          stroke="#00D9FF"
+                          strokeWidth="1.5"
+                          strokeDasharray="4 2"
+                          opacity="0.8"
+                          style={{
+                            filter: 'drop-shadow(0 0 4px rgba(0, 217, 255, 0.6))',
+                          }}
+                        />
+                        {/* 标签文字 */}
+                        <text
+                          x={x + 4}
+                          y={y - 4}
+                          fill="#00D9FF"
+                          fontSize="11"
+                          fontWeight="500"
+                          fontFamily="Ubuntu, sans-serif"
+                          style={{
+                            filter: 'drop-shadow(0 0 4px rgba(0, 217, 255, 0.8))',
+                          }}
+                        >
+                          {obj.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              );
+            })()}
           </div>
         )}
       </div>
