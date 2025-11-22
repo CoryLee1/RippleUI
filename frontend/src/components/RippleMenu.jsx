@@ -74,6 +74,68 @@ export default function RippleMenu({ isOpen, position, intents, onSelect, isLoad
               />
             </g>
 
+            {/* 定义文字路径和圆弧段路径 */}
+            <defs>
+              {showButtons && intents.map((item, index) => {
+                const { radius, angle } = getRelativePosition(index, intents.length, baseRippleRadius, rippleSpacing);
+                const textPathId = `text-path-${item.id}`;
+                const arcPathId = `arc-path-${item.id}`;
+                
+                // 创建完整的圆形路径用于文字排列
+                const textPathD = `M ${center},${center - radius} A ${radius},${radius} 0 1,1 ${center},${center + radius} A ${radius},${radius} 0 1,1 ${center},${center - radius}`;
+                
+                // 创建圆弧段路径（填充的按钮区域）
+                // 圆弧段的角度范围（约 60 度）
+                const arcAngle = (Math.PI * 2) / intents.length; // 每个意图占的角度
+                const arcStartAngle = angle - arcAngle / 2;
+                const arcEndAngle = angle + arcAngle / 2;
+                
+                // 计算圆弧段的起点和终点
+                const startX = center + Math.cos(arcStartAngle) * radius;
+                const startY = center + Math.sin(arcStartAngle) * radius;
+                const endX = center + Math.cos(arcEndAngle) * radius;
+                const endY = center + Math.sin(arcEndAngle) * radius;
+                
+                // 圆弧段的宽度（径向）
+                const arcWidth = 20; // 圆弧段的宽度
+                const innerRadius = radius - arcWidth / 2;
+                const outerRadius = radius + arcWidth / 2;
+                
+                // 创建圆弧段路径（内外两个圆弧组成一个填充区域）
+                const innerStartX = center + Math.cos(arcStartAngle) * innerRadius;
+                const innerStartY = center + Math.sin(arcStartAngle) * innerRadius;
+                const innerEndX = center + Math.cos(arcEndAngle) * innerRadius;
+                const innerEndY = center + Math.sin(arcEndAngle) * innerRadius;
+                
+                const outerStartX = center + Math.cos(arcStartAngle) * outerRadius;
+                const outerStartY = center + Math.sin(arcStartAngle) * outerRadius;
+                const outerEndX = center + Math.cos(arcEndAngle) * outerRadius;
+                const outerEndY = center + Math.sin(arcEndAngle) * outerRadius;
+                
+                // 创建填充的圆弧段路径
+                const arcPathD = `M ${innerStartX},${innerStartY} 
+                                  A ${innerRadius},${innerRadius} 0 0,1 ${innerEndX},${innerEndY}
+                                  L ${outerEndX},${outerEndY}
+                                  A ${outerRadius},${outerRadius} 0 0,0 ${outerStartX},${outerStartY}
+                                  Z`;
+                
+                return (
+                  <g key={`paths-${item.id}`}>
+                    <path
+                      id={textPathId}
+                      d={textPathD}
+                      fill="none"
+                    />
+                    <path
+                      id={arcPathId}
+                      d={arcPathD}
+                      fill="none"
+                    />
+                  </g>
+                );
+              })}
+            </defs>
+
             {/* 涟漪圆圈 - 如果正在加载，显示预估数量的涟漪，带旋转和描边动画 */}
             {(isLoading ? Array.from({ length: estimatedIntents }, (_, i) => i) : intents).map((itemOrIndex, index) => {
               const totalItems = isLoading ? estimatedIntents : intents.length;
@@ -143,75 +205,96 @@ export default function RippleMenu({ isOpen, position, intents, onSelect, isLoad
                       strokeDasharray={isLoading ? `${arcLength} ${gapLength}` : "none"}
                     />
                   </motion.g>
+                  
+                  {/* 圆弧段按钮和文字标签（仅在加载完成后显示） */}
+                  {showButtons && !isLoading && (() => {
+                    const { angle, radius: textRadius } = getRelativePosition(index, totalItems, baseRippleRadius, rippleSpacing);
+                    // 计算文字在路径上的位置（从顶部开始，角度转换为路径百分比）
+                    const normalizedAngle = (angle + Math.PI / 2) / (2 * Math.PI); // 转换为 0-1
+                    const pathOffset = normalizedAngle * 100; // 转换为百分比
+                    
+                    // 圆弧段的参数
+                    const arcWidth = 24; // 圆弧段的径向宽度
+                    const arcAngleSpan = Math.PI / 3; // 圆弧段的角度范围（60度）
+                    const innerRadius = textRadius - arcWidth / 2;
+                    const outerRadius = textRadius + arcWidth / 2;
+                    const startAngle = angle - arcAngleSpan / 2;
+                    const endAngle = angle + arcAngleSpan / 2;
+                    
+                    // 计算圆弧段的四个角点
+                    const innerStartX = center + Math.cos(startAngle) * innerRadius;
+                    const innerStartY = center + Math.sin(startAngle) * innerRadius;
+                    const innerEndX = center + Math.cos(endAngle) * innerRadius;
+                    const innerEndY = center + Math.sin(endAngle) * innerRadius;
+                    const outerStartX = center + Math.cos(startAngle) * outerRadius;
+                    const outerStartY = center + Math.sin(startAngle) * outerRadius;
+                    const outerEndX = center + Math.cos(endAngle) * outerRadius;
+                    const outerEndY = center + Math.sin(endAngle) * outerRadius;
+                    
+                    // 创建填充的圆弧段路径
+                    const arcPathD = `M ${innerStartX},${innerStartY} 
+                                      A ${innerRadius},${innerRadius} 0 0,1 ${innerEndX},${innerEndY}
+                                      L ${outerEndX},${outerEndY}
+                                      A ${outerRadius},${outerRadius} 0 0,0 ${outerStartX},${outerStartY}
+                                      Z`;
+                    
+                    return (
+                      <g key={`button-${itemOrIndex.id}`}>
+                        {/* 填充的圆弧段按钮（可点击） */}
+                        <motion.path
+                          d={arcPathD}
+                          fill="rgba(255, 255, 255, 0.15)"
+                          stroke="rgba(255, 255, 255, 0.3)"
+                          strokeWidth="1"
+                          className="cursor-pointer"
+                          style={{ pointerEvents: 'auto' }}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{
+                            delay: index * 0.05 + 0.1,
+                            duration: 0.3
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(itemOrIndex);
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.setAttribute('fill', 'rgba(255, 255, 255, 0.25)');
+                            e.currentTarget.setAttribute('stroke', 'rgba(255, 255, 255, 0.5)');
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.setAttribute('fill', 'rgba(255, 255, 255, 0.15)');
+                            e.currentTarget.setAttribute('stroke', 'rgba(255, 255, 255, 0.3)');
+                          }}
+                        />
+                        
+                        {/* 文字标签 - 沿着圆弧路径排列 */}
+                        <text
+                          fontSize="12"
+                          fill="white"
+                          fontWeight="normal"
+                          fontFamily="Ubuntu, sans-serif"
+                          style={{ 
+                            textShadow: '0 0 8px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.9)',
+                            pointerEvents: 'none'
+                          }}
+                        >
+                          <textPath
+                            href={`#text-path-${itemOrIndex.id}`}
+                            startOffset={`${pathOffset}%`}
+                            textAnchor="middle"
+                          >
+                            {itemOrIndex.label}
+                          </textPath>
+                        </text>
+                      </g>
+                    );
+                  })()}
                 </g>
               );
             })}
           </svg>
 
-          {/* --- 层级 2: 功能按钮 (前景，加载完成后显示) --- */}
-          {showButtons && (
-            <div className="absolute top-0 left-0 w-full h-full">
-              {intents.map((item, index) => {
-              const { x, y } = getRelativePosition(index, intents.length, baseRippleRadius, rippleSpacing);
-              
-              // 按钮在容器内的绝对坐标
-              const btnLeft = center + x;
-              const btnTop = center + y;
-
-              return (
-                <motion.button
-                  key={`btn-${item.id}`}
-                  className="absolute flex flex-col items-center justify-center group pointer-events-auto cursor-pointer"
-                  style={{
-                    left: btnLeft,
-                    top: btnTop,
-                    width: 48,
-                    height: 48,
-                    // ⭐️ 核心：将按钮自身的中心点对齐到计算出的坐标上
-                    transform: 'translate(-50%, -50%)' 
-                  }}
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  transition={{
-                    delay: index * 0.05 + 0.1, // 比涟漪稍晚一点出现
-                    type: "spring",
-                    stiffness: 200,
-                    damping: 20
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation(); // 防止点击按钮时触发背景点击
-                    onSelect(item);
-                  }}
-                  whileHover={{ scale: 1.15, zIndex: 10 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  {/* 图标圆形容器 */}
-                  <div 
-                    className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg text-2xl border-2 border-white/20 backdrop-blur-sm transition-colors"
-                    style={{ 
-                      backgroundColor: item.color || '#333',
-                      boxShadow: `0 0 15px ${item.color}40` // 淡淡的光晕
-                    }}
-                  >
-                    {item.emoji}
-                  </div>
-
-                  {/* 文字标签 (根据位置智能偏移，防止遮挡) */}
-                  <span 
-                    className="absolute whitespace-nowrap text-xs font-bold text-white bg-black/80 px-2 py-1 rounded-md backdrop-blur-md pointer-events-none"
-                    style={{
-                      // 简单的智能布局：如果按钮在上方(y<0)，文字在上方；反之在下方
-                      top: y < 0 ? -28 : 52,
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </motion.button>
-              );
-            })}
-            </div>
-          )}
         </motion.div>
       )}
     </AnimatePresence>
