@@ -6,7 +6,14 @@ import { Scan, Upload, Loader2 } from 'lucide-react';
 import visibleIcon from './assets/visable.png';
 import invisibleIcon from './assets/invisable.png';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+// 规范化 API URL：移除末尾斜杠，确保路径正确
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  // 移除末尾斜杠，避免双斜杠问题
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+};
+
+const API_URL = getApiUrl();
 
 function App() {
   const [image, setImage] = useState(null);

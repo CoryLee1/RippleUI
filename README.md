@@ -4,6 +4,11 @@
 
 RippleUI 是一个创新的用户界面系统，通过点击图像中的物体，智能生成可操作的意图菜单，实现直观的图像编辑和交互体验。
 
+## 🌐 在线体验
+
+- **前端**: [ripple-ui-beta.vercel.app](https://ripple-ui-beta.vercel.app)
+- **后端 API**: `rippleui-production.up.railway.app`
+
 ## ✨ 核心特性
 
 ### 🎯 智能物体识别

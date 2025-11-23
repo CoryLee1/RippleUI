@@ -115,7 +115,7 @@ services:
 
 创建 `frontend/.env.production`：
 ```env
-VITE_API_URL=https://your-backend-url.railway.app
+VITE_API_URL=https://rippleui-production.up.railway.app/
 ```
 
 修改 `frontend/src/App.jsx`：
