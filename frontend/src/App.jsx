@@ -367,6 +367,13 @@ function App() {
         onSelect={handleIntentSelect}
         isLoading={isLoading}
       />
+
+      {/* 版权信息 */}
+      <div className="absolute bottom-0 left-0 w-full flex justify-center items-center pb-4 z-0 pointer-events-none">
+        <p className="text-white/30 text-xs font-light">
+          Copyrights all rights reserved by Anngel LLC / Echuu
+        </p>
+      </div>
     </div>
   );
 }
