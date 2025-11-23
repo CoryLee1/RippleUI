@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from typing import List
 from PIL import Image
 from services.utils import clean_json_string
+from services.serp_service import SerpService
 from schemas import DetectedObject, RippleIntent
 
 load_dotenv()
@@ -29,13 +30,23 @@ MODEL_NAME = 'gemini-2.0-flash'
 IMAGE_EDIT_MODEL = 'gemini-2.5-flash-image'  # 官方推荐的图像编辑模型
 
 class AIService:
-    def __init__(self):
+    def __init__(self, enable_web_search: bool = True):
+        """
+        初始化 AI 服务
+        
+        Args:
+            enable_web_search: 是否启用网络搜索功能（默认 True）
+        """
         if USE_NEW_SDK:
             self.model_name = MODEL_NAME
             self.image_edit_model_name = IMAGE_EDIT_MODEL
         else:
             self.model = genai.GenerativeModel(MODEL_NAME)
             self.image_edit_model = genai.GenerativeModel(IMAGE_EDIT_MODEL)
+        
+        # 初始化 SERP 服务（如果启用）
+        self.enable_web_search = enable_web_search
+        self.serp_service = SerpService() if enable_web_search else None
 
     async def analyze_scene(self, image) -> List[DetectedObject]:
         """
@@ -99,30 +110,101 @@ class AIService:
 
     async def infer_intent(self, image, clicked_label: str, nearby_labels: List[str]) -> List[RippleIntent]:
         """
-        Step 2: 意图推理 (Cached Inference)
-        根据点击的物体，生成 Ripple Menu 选项。
+        Step 2: 意图推理 (Cached Inference with Web Search)
+        根据点击的物体，结合互联网资源，生成 Ripple Menu 选项。
         """
-        prompt = f"""
+        # 构建基础 prompt
+        base_prompt = f"""
         User clicked on a '{clicked_label}' in the image.
         Context objects nearby: {nearby_labels}.
+        """
         
-        Predict 4 distinct user intents (actions) for this object.
-        1. Practical (e.g., Buy, Open)
-        2. Creative (e.g., Recolor, Change Style)
-        3. Destructive/Edit (e.g., Remove)
-
-        Return JSON list:
+        # 检测是否为商品
+        product_keywords = ['clothing', 'clothes', 'shirt', 'dress', 'jacket', 'shoe', 'bag', 
+                          'accessory', 'product', 'item', '商品', '衣服', '鞋子', '包', '配饰']
+        is_product = any(keyword.lower() in clicked_label.lower() for keyword in product_keywords)
+        
+        # 如果启用了网络搜索，先搜索相关信息
+        web_context = ""
+        web_results = []
+        if self.enable_web_search and self.serp_service:
+            print(f"🌐 Searching web for: {clicked_label} {'(product)' if is_product else ''}")
+            web_context, web_results = await self.serp_service.search_related_actions(
+                clicked_label, 
+                nearby_labels,
+                is_product=is_product
+            )
+        
+        # 构建完整的 prompt - 从用户意图出发
+        prompt = f"""
+        {base_prompt}
+        
+        {web_context if web_context else ""}
+        
+        **Think from the user's perspective**: When a user clicks on '{clicked_label}' in an image, what are their most likely intentions?
+        
+        Step 1: Analyze user intentions
+        Consider what a real person would want to do when they see and click on this object:
+        - What questions might they have?
+        - What actions would they naturally want to take?
+        - What information would be useful to them?
+        - What creative possibilities interest them?
+        
+        Step 2: Generate actions based on intentions
+        For each identified user intention, provide the most appropriate action type and functionality.
+        
+        Action types available:
+        1. **Image Edit** (action_type: "edit"): When user wants to modify the image
+           - Change appearance (color, style, effects)
+           - Remove or replace the object
+           - Add elements or transform
+           
+        2. **Information** (action_type: "info"): When user wants to learn more
+           - Get details, specifications, history
+           - Understand usage or context
+           
+        3. **Navigate** (action_type: "navigate"): When user wants to visit related resources
+           - Official websites, stores, services
+           - Purchase or booking pages
+           
+        4. **Search** (action_type: "search"): When user wants to find related content
+           - Similar items, reviews, tutorials
+           - **For products**: Search on eBay or shopping platforms (use "site:ebay.com {clicked_label}" format)
+        
+        Step 3: Return 4-6 actions
+        Return JSON list with actions that match real user intentions:
         [
             {{
                 "id": 1,
-                "label": "Short Button Text",
+                "label": "Short Button Text (user-friendly)",
                 "emoji": "Icon",
-                "description": "Tooltip text",
-                "color": "Hex Code (Green for Nav, Blue for Use, Orange for Edit)",
+                "description": "Clear description of what this action does",
+                "color": "Hex Code (Green for Nav, Blue for Use, Orange for Edit, Purple for Info)",
                 "probability": 0.8,
-                "editor_prompt": "Prompt for image generation AI to execute this"
+                "action_type": "edit|info|navigate|search",
+                "editor_prompt": "Prompt for image generation AI (only if action_type='edit')",
+                "action_data": {{
+                    "url": "https://...",  // for navigate/search
+                    "search_query": "...",  // for search (use "site:ebay.com {clicked_label}" for eBay)
+                    "info_text": "...",  // for info
+                    "search_engine": "ebay"  // optional: "ebay" for eBay searches
+                }}
             }}
         ]
+        
+        Guidelines:
+        - **User-first thinking**: Start with "What would a user want?" not "What features can I show?"
+        - **Natural intentions**: Common user intentions include:
+          * "I want to change how this looks" → edit action
+          * "I want to know more about this" → info action
+          * "I want to buy/find this" → search/navigate action (for products, naturally include eBay)
+          * "I want to remove this" → edit action
+          * "I want to see similar items" → search action
+        - **Product context**: If '{clicked_label}' is a product (clothing, shoes, bags, accessories), 
+          users naturally want to: find where to buy it, see prices, compare options → provide eBay search naturally
+        - **Creative possibilities**: Users also enjoy creative exploration → include 1-2 creative editing options
+        - **Balance**: Mix practical and creative intentions based on what real users would want
+        - **Web context**: If search results are provided, use them to inform realistic user intentions
         """
         
         try:
@@ -131,7 +213,7 @@ class AIService:
                     model=self.model_name,
                     contents=[prompt, image],
                     config=types.GenerateContentConfig(
-                        temperature=0.5,
+                        temperature=0.7,  # 稍微提高温度以利用网络搜索结果
                         thinking_config=types.ThinkingConfig(thinking_budget=0)
                     )
                 )
@@ -143,6 +225,36 @@ class AIService:
             
             intents = []
             for item in data:
+                # 如果 AI 没有生成 action_type，根据 editor_prompt 推断
+                if "action_type" not in item:
+                    item["action_type"] = "edit" if item.get("editor_prompt") else "info"
+                
+                # 如果 action_type 是 navigate/search 但没有 action_data，尝试从 web_results 填充
+                if item["action_type"] in ["navigate", "search"] and not item.get("action_data"):
+                    if web_results:
+                        # 对于商品，如果是搜索类型，优先使用 eBay 搜索格式
+                        if is_product and item["action_type"] == "search":
+                            item["action_data"] = {
+                                "search_query": f"{clicked_label} site:ebay.com",
+                                "search_engine": "ebay",
+                                "title": f"Search {clicked_label} on eBay"
+                            }
+                        else:
+                            # 使用第一个搜索结果作为默认链接
+                            item["action_data"] = {
+                                "url": web_results[0].get("link", ""),
+                                "title": web_results[0].get("title", ""),
+                                "search_query": f"{clicked_label} {item['label']}"
+                            }
+                
+                # 如果 action_type 是 info 但没有 action_data，从 web_results 填充信息
+                if item["action_type"] == "info" and not item.get("action_data"):
+                    if web_results:
+                        item["action_data"] = {
+                            "info_text": web_results[0].get("snippet", ""),
+                            "source_url": web_results[0].get("link", "")
+                        }
+                
                 intents.append(RippleIntent(**item))
             return intents
         except Exception as e:

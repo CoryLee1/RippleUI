@@ -6,7 +6,7 @@ import { Scan, Upload, Loader2 } from 'lucide-react';
 import visibleIcon from './assets/visable.png';
 import invisibleIcon from './assets/invisable.png';
 
-const API_URL = "http://localhost:8000/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 function App() {
   const [image, setImage] = useState(null);
@@ -106,30 +106,87 @@ function App() {
     }
   };
 
-  // 3. 处理意图执行 (Execution)
+  // 3. 处理意图执行 (Execution) - 支持多种操作类型
   const handleIntentSelect = async (intent) => {
     setMenuState({ ...menuState, isOpen: false });
-    setStatus(`Executing: ${intent.label}... ${enableImageEdit ? '(Gemini Image Edit)' : '(Preview Mode)'}`);
     setIsLoading(true);
 
-    // 使用之前保存的点击物体框
-    const box = clickedObj ? clickedObj.box_2d : [0, 0, 100, 100];
+    const actionType = intent.action_type || 'edit';
+    let statusMessage = `Executing: ${intent.label}...`;
+    
+    if (actionType === 'edit') {
+      statusMessage += enableImageEdit ? ' (Gemini Image Edit)' : ' (Preview Mode)';
+    } else if (actionType === 'info') {
+      statusMessage += ' (Information)';
+    } else if (actionType === 'navigate') {
+      statusMessage += ' (Opening link...)';
+    } else if (actionType === 'search') {
+      statusMessage += ' (Searching...)';
+    }
+    
+    setStatus(statusMessage);
 
     const formData = new FormData();
-    formData.append('prompt', intent.editor_prompt);
-    formData.append('box_json', JSON.stringify(box));
-    formData.append('enable_image_edit', enableImageEdit.toString());
+    formData.append('intent_id', intent.id);
+    formData.append('action_type', actionType);
+    
+    // 根据操作类型添加不同的数据
+    if (actionType === 'edit') {
+      const box = clickedObj ? clickedObj.box_2d : [0, 0, 100, 100];
+      formData.append('prompt', intent.editor_prompt || '');
+      formData.append('box_json', JSON.stringify(box));
+      formData.append('enable_image_edit', enableImageEdit.toString());
+    } else {
+      // info, navigate, search 操作
+      formData.append('action_data_json', JSON.stringify(intent.action_data || {}));
+    }
 
     try {
       const res = await axios.post(`${API_URL}/execute`, formData);
-      // 接收新图片 (Base64)
-      if(res.data.image_base64) {
+      
+      // 根据操作类型处理响应
+      if (actionType === 'edit') {
+        // 图像编辑：更新图片
+        if (res.data.image_base64) {
           setImage(`data:image/png;base64,${res.data.image_base64}`);
+        }
+        setStatus(enableImageEdit ? "Image edited successfully." : "Preview mode (editing disabled).");
+      } else if (actionType === 'info') {
+        // 信息查询：显示信息
+        const infoData = res.data.data;
+        const infoText = infoData.info_text || 'No information available.';
+        const sourceUrl = infoData.source_url || '';
+        
+        // 可以在这里显示一个模态框或通知
+        alert(`${intent.label}\n\n${infoText}${sourceUrl ? `\n\nSource: ${sourceUrl}` : ''}`);
+        setStatus("Information displayed.");
+      } else if (actionType === 'navigate') {
+        // 导航：打开链接
+        const url = res.data.data.url;
+        if (url) {
+          window.open(url, '_blank');
+          setStatus(`Opened: ${intent.label}`);
+        } else {
+          setStatus("No URL available.");
+        }
+      } else if (actionType === 'search') {
+        // 搜索：显示搜索结果
+        const searchData = res.data.data;
+        const results = searchData.results || [];
+        
+        if (results.length > 0) {
+          const resultsText = results.map((r, i) => 
+            `${i + 1}. ${r.title}\n   ${r.snippet}\n   ${r.link}`
+          ).join('\n\n');
+          alert(`Search Results for: ${searchData.query}\n\n${resultsText}`);
+          setStatus(`Found ${results.length} search results.`);
+        } else {
+          setStatus("No search results found.");
+        }
       }
-      setStatus(enableImageEdit ? "Image edited successfully." : "Preview mode (editing disabled).");
     } catch (err) {
       console.error(err);
-      setStatus("Error executing action.");
+      setStatus(`Error executing ${actionType} action.`);
     } finally {
       setIsLoading(false);
     }
@@ -186,21 +243,38 @@ function App() {
       {/* 主画布区 */}
       <div className="w-full h-full flex items-center justify-center relative">
         {!image && (
-          <div className="text-center opacity-30">
-            <Scan size={64} className="mx-auto mb-4" />
-            <p>Drag & Drop or Upload an Image</p>
+          <div className="text-center">
+            <Scan size={64} className="mx-auto mb-6 opacity-30" />
+            <p className="text-white/30 mb-8 text-lg">Drag & Drop or Upload an Image</p>
+            
+            {/* 3步操作说明 */}
+            <div className="flex flex-col gap-3 items-center">
+              <div className="flex items-center gap-2 text-white/60 text-sm">
+                <span className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 text-xs font-medium">1</span>
+                <span>Upload an image</span>
+              </div>
+              <div className="flex items-center gap-2 text-white/60 text-sm">
+                <span className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 text-xs font-medium">2</span>
+                <span>Click on any object</span>
+              </div>
+              <div className="flex items-center gap-2 text-white/60 text-sm">
+                <span className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 text-xs font-medium">3</span>
+                <span>Select an action from the menu</span>
+              </div>
+            </div>
           </div>
         )}
         
         {image && (
-          <div className="relative shadow-2xl inline-block">
-            <img 
-              ref={imageRef}
-              src={image} 
-              alt="Workspace" 
-              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg block"
-              onClick={handleImageClick}
-            />
+          <>
+            <div className="relative shadow-2xl inline-block">
+              <img 
+                ref={imageRef}
+                src={image} 
+                alt="Workspace" 
+                className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg block"
+                onClick={handleImageClick}
+              />
             
             {/* 可视化 Bounding Box - 蓝色科幻细线 */}
             {showBoundingBoxes && objects.length > 0 && imageRef.current && (() => {
@@ -262,7 +336,19 @@ function App() {
                 </svg>
               );
             })()}
-          </div>
+            </div>
+            
+            {/* 底部操作提示（小字） */}
+            {objects.length === 0 && (
+              <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-4 text-xs">
+                <span className="text-white/40">1. Upload</span>
+                <span className="text-blue-400/60">→</span>
+                <span className="text-white/40">2. Click object</span>
+                <span className="text-blue-400/60">→</span>
+                <span className="text-white/40">3. Select action</span>
+              </div>
+            )}
+          </>
         )}
       </div>
 

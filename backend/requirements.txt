@@ -7,4 +7,5 @@ pillow
 python-dotenv
 pydantic
 numpy
+httpx
 

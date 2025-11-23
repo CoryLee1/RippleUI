@@ -30,7 +30,9 @@ class RippleIntent(BaseModel):
     description: str
     color: str
     probability: float
-    editor_prompt: str  # 关键：用于 Step 3 执行
+    action_type: str  # "edit" | "info" | "navigate" | "search"
+    editor_prompt: str = ""  # 用于图像编辑的提示词（action_type="edit" 时使用）
+    action_data: dict = {}  # 其他操作的数据（链接、搜索结果等）
 
 class InferenceResponse(BaseModel):
     intents: List[RippleIntent]
