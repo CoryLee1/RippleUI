@@ -180,3 +180,4 @@ CORS_ORIGINS = https://ripple-ui-beta.vercel.app,http://localhost:5173
 - [Railway 环境变量文档](https://docs.railway.app/develop/variables)
 - [FastAPI CORS 文档](https://fastapi.tiangolo.com/tutorial/cors/)
 
+
